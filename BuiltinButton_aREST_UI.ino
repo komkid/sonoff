@@ -12,8 +12,8 @@
 #include <EEPROM.h>
 
 // WiFi parameters
-const char* ssid = "BaanKon";
-const char* password = "62239925";
+const char* ssid = "SSID";
+const char* password = "PASSWORD";
 
 char state = 0;
 int buttonState = 0;         // variable for reading the pushbutton status
