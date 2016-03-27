@@ -15,9 +15,13 @@ int buttonState = 0;         // variable for reading the pushbutton status
 
 #define EEPROM_STATE_ADDRESS 128
 
+
 /*################################ NTP ################################*/
 #include <WiFiUdp.h>
 unsigned int localPort = 2390;      // local port to listen for UDP packets
+
+unsigned int h;
+unsigned int m;
 
 /* Don't hardwire the IP address or we won't get the benefits of the pool.
  *  Lookup the IP address for the host name instead */
@@ -56,6 +60,12 @@ void saveState() {
 
 void setup(void)
 {  
+  pinMode(BUTTONPIN, INPUT);
+  pinMode(RELAYPIN, OUTPUT);
+  #ifdef LEDPIN
+    pinMode(LEDPIN, OUTPUT);
+  #endif
+
   // Start Serial
   Serial.begin(115200);
   
@@ -93,13 +103,11 @@ void loop() {
     state = (state == 0) ? 1 : 0;
     updateIO();
     saveState();
-    delay(1000);
+//    delay(1000);
   }
   
 /*################################ NTP ################################*/
-  unsigned int h;
-  unsigned int m;
-  unsigned long delayInterval = 10 * 1000;
+  unsigned long delayInterval = 3 * 1000;
   //get a random server from the pool
   WiFi.hostByName(ntpServerName, timeServerIP); 
 
@@ -110,7 +118,6 @@ void loop() {
   int cb = udp.parsePacket();
   if (!cb) {
     Serial.println("no packet yet");
-    delayInterval = 10000;
   }
   else {
     Serial.print("packet received, length=");
