@@ -1,27 +1,31 @@
-// Import required libraries
+/*
+
+ Udp NTP Client
+
+ Get the time from a Network Time Protocol (NTP) time server
+ Demonstrates use of UDP sendPacket and ReceivePacket
+ For more on NTP time servers and the messages needed to communicate with them,
+ see http://en.wikipedia.org/wiki/Network_Time_Protocol
+
+ created 4 Sep 2010
+ by Michael Margolis
+ modified 9 Apr 2012
+ by Tom Igoe
+ updated for the ESP8266 12 Apr 2015 
+ by Ivan Grokhotkov
+
+ This code is in the public domain.
+
+ */
+
 #include <ESP8266WiFi.h>
-#include <EEPROM.h>
-
-// WiFi parameters
-const char* ssid = "SSID";
-const char* password = "PASSWORD";
-
-char state = 0;
-int buttonState = 0;         // variable for reading the pushbutton status
-
-#define RELAYPIN 12
-#define LEDPIN 13
-#define BUTTONPIN 0     // the number of the pushbutton pin
-
-#define EEPROM_STATE_ADDRESS 128
-
-
-/*################################ NTP ################################*/
 #include <WiFiUdp.h>
-unsigned int localPort = 2390;      // local port to listen for UDP packets
 
-unsigned int h;
-unsigned int m;
+char ssid[] = "SSID";  //  your network SSID (name)
+char pass[] = "PASSWORD";       // your network password
+
+
+unsigned int localPort = 2390;      // local port to listen for UDP packets
 
 /* Don't hardwire the IP address or we won't get the benefits of the pool.
  *  Lookup the IP address for the host name instead */
@@ -35,79 +39,87 @@ byte packetBuffer[ NTP_PACKET_SIZE]; //buffer to hold incoming and outgoing pack
 
 // A UDP instance to let us send and receive packets over UDP
 WiFiUDP udp;
-/*################################ NTP ################################*/
 
-void updateIO() {
-  if (state == 1) {
-    digitalWrite(RELAYPIN, HIGH);
-    #ifdef LEDPIN
-      digitalWrite(LEDPIN, LOW);
-    #endif
-  }
-  else {
-    state = 0;
-    digitalWrite(RELAYPIN, LOW);
-    #ifdef LEDPIN
-      digitalWrite(LEDPIN, HIGH);
-    #endif
-  }
-}
+#include "Timer.h"
+Timer t;
+int inputEvent;
+int ntpEvent;
+int toggleEvent;
 
-void saveState() {
-  EEPROM.write(EEPROM_STATE_ADDRESS, state);
-  EEPROM.commit();
-}
+unsigned int h;
+unsigned int m;
 
-void setup(void)
-{  
+char state = 0;
+int buttonState = 0;         // variable for reading the pushbutton status
+
+#define RELAYPIN 12
+#define LEDPIN 13
+#define BUTTONPIN 0     // the number of the pushbutton pin
+
+void setup()
+{
   pinMode(BUTTONPIN, INPUT);
   pinMode(RELAYPIN, OUTPUT);
   #ifdef LEDPIN
     pinMode(LEDPIN, OUTPUT);
   #endif
 
-  // Start Serial
   Serial.begin(115200);
-  
-  EEPROM.begin(512);
-  state = EEPROM.read(EEPROM_STATE_ADDRESS) == 1 ? 1 : 0;
-  updateIO();
+  Serial.println();
 
-  // Connect to WiFi
-  WiFi.begin(ssid, password);
+  // We start by connecting to a WiFi network
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, pass);
+  
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
   Serial.println("");
-  Serial.println("WiFi connected");
- 
-  // Print the IP address
-  Serial.println(WiFi.localIP());
   
-/*################################ NTP ################################*/
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+
   Serial.println("Starting UDP");
   udp.begin(localPort);
   Serial.print("Local port: ");
   Serial.println(udp.localPort());
-/*################################ NTP ################################*/
+  
+  inputEvent = t.every(1000, readInput);
+  Serial.print("input event started id=");
+  Serial.println(inputEvent);
+
+  ntpEvent = t.every(10000, getNTP);
+  Serial.print("ntp event started id=");
+  Serial.println(ntpEvent);
+  
 }
 
-void loop() {
+void loop()
+{
+  t.update();
+}
+
+void readInput()
+{
   // read the state of the pushbutton value:
   buttonState = digitalRead(BUTTONPIN);
 
   // check if the pushbutton is pressed.
   // if it is, the buttonState is HIGH:
   if (buttonState == LOW) {
+    Serial.println("Button pressed");
     state = (state == 0) ? 1 : 0;
     updateIO();
-    saveState();
 //    delay(1000);
   }
+}
+
+void getNTP()
+{
   
-/*################################ NTP ################################*/
-  unsigned long delayInterval = 3 * 1000;
   //get a random server from the pool
   WiFi.hostByName(ntpServerName, timeServerIP); 
 
@@ -163,21 +175,58 @@ void loop() {
       Serial.print('0');
     }
     Serial.println(epoch % 60); // print the second
+    t.stop(ntpEvent);
+    Serial.print("ntp event stopped id=");
+    Serial.println(ntpEvent);
+
+    toggleEvent = t.every(60000, timeCheck);
+    Serial.print("On/OFF event started id=");
+    Serial.println(toggleEvent);
+  
   }
-  // wait ten seconds before asking for the time again
-  //unsigned long delayInterval = 10 * 60 * 1000; // 5 min
-  if(h == 18 && m == 30){
+}
+
+void timeCheck()
+{
+  Serial.println("Checking...");
+  m++;
+  if(m == 60){
+    m = 0;
+    h++;
+    if(h == 24) h = 0;
+  }
+  Serial.print("h = ");
+  Serial.println(h);
+  Serial.print("m = ");
+  Serial.println(m);
+
+  if(h == 21 && m == 17){
     state = 1;
+    Serial.println("ON");
     updateIO();
   }
 
-  if(h == 6 && m == 30){
+  if(h == 21 && m == 18){
     state = 0;
+    Serial.println("OFF");
     updateIO();
   }
+}
 
-  delay(delayInterval);
-/*################################ NTP ################################*/
+void updateIO() {
+  if (state == 1) {
+    digitalWrite(RELAYPIN, HIGH);
+    #ifdef LEDPIN
+      digitalWrite(LEDPIN, LOW);
+    #endif
+  }
+  else {
+    state = 0;
+    digitalWrite(RELAYPIN, LOW);
+    #ifdef LEDPIN
+      digitalWrite(LEDPIN, HIGH);
+    #endif
+  }
 }
 
 // send an NTP request to the time server at the given address
