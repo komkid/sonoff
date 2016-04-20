@@ -30,7 +30,7 @@ unsigned int localPort = 2390;      // local port to listen for UDP packets
 /* Don't hardwire the IP address or we won't get the benefits of the pool.
  *  Lookup the IP address for the host name instead */
 //IPAddress timeServer(129, 6, 15, 28); // time.nist.gov NTP server
-IPAddress timeServerIP; // time.nist.gov NTP server address
+IPAddress timeServerIP(192, 168, 0, 2); // time.nist.gov NTP server address
 const char* ntpServerName = "time.nist.gov";
 
 const int NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
@@ -64,6 +64,9 @@ void setup()
     pinMode(LEDPIN, OUTPUT);
   #endif
 
+  state = 1;
+  updateIO();
+
   Serial.begin(115200);
   Serial.println();
 
@@ -87,10 +90,6 @@ void setup()
   Serial.print("Local port: ");
   Serial.println(udp.localPort());
   
-  inputEvent = t.every(1000, readInput);
-  Serial.print("input event started id=");
-  Serial.println(inputEvent);
-
   ntpEvent = t.every(10000, getNTP);
   Serial.print("ntp event started id=");
   Serial.println(ntpEvent);
@@ -100,10 +99,6 @@ void setup()
 void loop()
 {
   t.update();
-}
-
-void readInput()
-{
   // read the state of the pushbutton value:
   buttonState = digitalRead(BUTTONPIN);
 
@@ -113,7 +108,7 @@ void readInput()
     Serial.println("Button pressed");
     state = (state == 0) ? 1 : 0;
     updateIO();
-//    delay(1000);
+    delay(500);
   }
 }
 
@@ -121,7 +116,7 @@ void getNTP()
 {
   
   //get a random server from the pool
-  WiFi.hostByName(ntpServerName, timeServerIP); 
+  //WiFi.hostByName(ntpServerName, timeServerIP); 
 
   sendNTPpacket(timeServerIP); // send an NTP packet to a time server
   // wait to see if a reply is available
@@ -200,21 +195,18 @@ void timeCheck()
   Serial.print("m = ");
   Serial.println(m);
 
-  if(h == 21 && m == 17){
-    state = 1;
-    Serial.println("ON");
-    updateIO();
-  }
-
-  if(h == 21 && m == 18){
+  if(m % 5 == 0){
     state = 0;
-    Serial.println("OFF");
+    updateIO();
+  } else {
+    state = 1;
     updateIO();
   }
 }
 
 void updateIO() {
   if (state == 1) {
+    Serial.println("Going ON");
     digitalWrite(RELAYPIN, HIGH);
     #ifdef LEDPIN
       digitalWrite(LEDPIN, LOW);
@@ -222,6 +214,7 @@ void updateIO() {
   }
   else {
     state = 0;
+    Serial.println("Going OFF");
     digitalWrite(RELAYPIN, LOW);
     #ifdef LEDPIN
       digitalWrite(LEDPIN, HIGH);
